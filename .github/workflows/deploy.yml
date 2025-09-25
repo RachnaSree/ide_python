@@ -9,6 +9,7 @@ on:
 env:
   AWS_REGION: us-east-1             # Update with your region
   EKS_CLUSTER: online-ide-cluster   # Update with your EKS cluster name
+  K8S_MANIFEST: online-ide.yaml
 
 jobs:
   build:
@@ -57,7 +58,19 @@ jobs:
       # Step 7: Deploy new image to Kubernetes
       - name: Update Kubernetes deployment
         run: |
+    
           kubectl set image deployment/online-ide-deployment \
+            online-ide=${{ secrets.DOCKERHUB_USERNAME }}/online-ide:${{ env.SHA_SHORT }} \
+            --record || echo "Deployment not found yet, will apply manifest"
+          
+          # Apply manifest (Deployment + Service)
+          kubectl apply -f ${{ env.K8S_MANIFEST }}
+
+      # Step 8: Wait for rollout to finish
+      - name: Verify rollout status
+        run: kubectl rollout status deployment/online-ide-deployment
+
+          
             online-ide=${{ secrets.DOCKERHUB_USERNAME }}/online-ide:${{ env.SHA_SHORT }} \
             --record
           kubectl rollout status deployment/online-ide-deployment
