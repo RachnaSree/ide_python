@@ -1,34 +1,36 @@
-name: CI/CD with Docker Hub and Versioning
+name: CI/CD - Online IDE to EKS
 
 on:
   push:
     branches:
       - main
-  workflow_dispatch:
+  workflow_dispatch: # allows manual trigger
+
+env:
+  AWS_REGION: us-east-1             # Update with your region
+  EKS_CLUSTER: online-ide-cluster   # Update with your EKS cluster name
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-      # Step 1: Checkout code
+      # Step 1: Checkout your code
       - name: Checkout repository
         uses: actions/checkout@v4
 
       # Step 2: Log in to Docker Hub
-      - name: Log in to Docker Hub
+      - name: Docker Hub login
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       # Step 3: Extract short Git commit SHA
-      - name: Get short SHA
-        id: vars
+      - name: Set Git SHA environment variable
         run: echo "SHA_SHORT=$(echo $GITHUB_SHA | cut -c1-7)" >> $GITHUB_ENV
 
-      # Step 4: Build and push Docker image with tags
-      - name: Build & Push Docker Image
+      # Step 4: Build & push Docker image
+      - name: Build and push Docker image
         uses: docker/build-push-action@v4
         with:
           context: .
@@ -40,17 +42,22 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     needs: build
-
     steps:
-      # Step 5: SSH into server and deploy
-      - name: Deploy on Server
-        uses: appleboy/ssh-action@v1.2.0
+      # Step 5: Configure AWS credentials (via OIDC or secrets)
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
         with:
-          host: ${{ secrets.SERVER_IP }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            docker pull ${{ secrets.DOCKERHUB_USERNAME }}/online-ide:latest
-            docker stop online-ide || true
-            docker rm online-ide || true
-            docker run -d -p 5000:5000 --name online-ide ${{ secrets.DOCKERHUB_USERNAME }}/online-ide:latest
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # Step 6: Configure kubectl to connect to EKS
+      - name: Update kubeconfig for EKS
+        run: aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER }} --region ${{ env.AWS_REGION }}
+
+      # Step 7: Deploy new image to Kubernetes
+      - name: Update Kubernetes deployment
+        run: |
+          kubectl set image deployment/online-ide-deployment \
+            online-ide=${{ secrets.DOCKERHUB_USERNAME }}/online-ide:${{ env.SHA_SHORT }} \
+            --record
+          kubectl rollout status deployment/online-ide-deployment
