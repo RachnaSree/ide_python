@@ -7,7 +7,7 @@ on:
 env:
   AWS_REGION: us-east-1             # Update with your region
   EKS_CLUSTER: ide-cluster-1   # Update with your EKS cluster name
-  K8S_MANIFEST: ./deployment.yaml
+  K8S_MANIFEST: deployment.yaml
 
 jobs:
   build:
