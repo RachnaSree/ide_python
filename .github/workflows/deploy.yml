@@ -1,34 +1,30 @@
 name: CI/CD - Online IDE to EKS
 
 on:
-
-  workflow_dispatch: # allows manual trigger
+  workflow_dispatch: # Manual trigger only
 
 env:
-  AWS_REGION: us-east-1             # Update with your region
-  EKS_CLUSTER: ide-cluster-1   # Update with your EKS cluster name
-   
+  AWS_REGION: us-east-1
+  EKS_CLUSTER: ide-cluster-1
+  DEPLOYMENT_NAME: online-ide-deployment
+  K8S_MANIFEST: deployment.yaml
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      # Step 1: Checkout your code
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Step 2: Log in to Docker Hub
       - name: Docker Hub login
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # Step 3: Extract short Git commit SHA
-      - name: Set Git SHA environment variable
+      - name: Set Git SHA
         run: echo "SHA_SHORT=$(echo $GITHUB_SHA | cut -c1-7)" >> $GITHUB_ENV
 
-      # Step 4: Build & push Docker image
       - name: Build and push Docker image
         uses: docker/build-push-action@v4
         with:
@@ -42,40 +38,34 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-  
-      # Step 5: Configure AWS credentials (via OIDC or secrets)
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
-              aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-              aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-              aws-region: us-east-1
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
 
-
-      # Step 6: Configure kubectl to connect to EKS
       - name: Update kubeconfig for EKS
         run: aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER }} --region ${{ env.AWS_REGION }}
 
-      # Step 7: Deploy new image to Kubernetes
-      - name: Update Kubernetes deployment
+      - name: Deploy or update Kubernetes deployment
         run: |
+          # Apply manifest (Deployment + Service)
+          kubectl apply -f ${{ env.K8S_MANIFEST }}
 
-         # Apply manifest (Deployment + Service)
-          kubectl apply -f deployment.yaml
-          
-          kubectl set image deployment/online-ide-deployment \
-            online-ide=${{ secrets.DOCKERHUB_USERNAME }}/online-ide:${{ env.SHA_SHORT }} \
-            --record || echo "Deployment not found yet, will apply manifest"
-          
-          
+          # Check if deployment exists
+          if kubectl get deployment ${{ env.DEPLOYMENT_NAME }} >/dev/null 2>&1; then
+            echo "Deployment exists, updating image..."
+            kubectl set image deployment/${{ env.DEPLOYMENT_NAME }} \
+              online-ide=${{ secrets.DOCKERHUB_USERNAME }}/online-ide:${{ env.SHA_SHORT }} \
+              --record
+          else
+            echo "Deployment does not exist, creating..."
+            kubectl apply -f ${{ env.K8S_MANIFEST }}
+          fi
 
-      # Step 8: Wait for rollout to finish
       - name: Verify rollout status
-        run: kubectl rollout status deployment/online-ide-deployment
-
-          
-            online-ide=${{ secrets.DOCKERHUB_USERNAME }}/online-ide:${{ env.SHA_SHORT }} \
-            --record
-          kubectl rollout status deployment/online-ide-deployment
+        run: kubectl rollout status deployment/${{ env.DEPLOYMENT_NAME }}
