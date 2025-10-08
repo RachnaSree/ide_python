@@ -7,7 +7,7 @@ on:
 env:
   AWS_REGION: us-east-1             # Update with your region
   EKS_CLUSTER: ide-cluster-1   # Update with your EKS cluster name
-  K8S_MANIFEST: deployment.yaml
+   
 
 jobs:
   build:
@@ -42,6 +42,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    steps:
       # Step 5: Configure AWS credentials (via OIDC or secrets)
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
@@ -60,7 +63,7 @@ jobs:
         run: |
 
          # Apply manifest (Deployment + Service)
-          kubectl apply -f ${{ env.K8S_MANIFEST }}
+          kubectl apply -f deployment.yaml
           
           kubectl set image deployment/online-ide-deployment \
             online-ide=${{ secrets.DOCKERHUB_USERNAME }}/online-ide:${{ env.SHA_SHORT }} \
