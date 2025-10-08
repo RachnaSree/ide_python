@@ -1,9 +1,7 @@
 name: CI/CD - Online IDE to EKS
 
 on:
-  push:
-    branches:
-      - main
+
   workflow_dispatch: # allows manual trigger
 
 env:
@@ -60,13 +58,15 @@ jobs:
       # Step 7: Deploy new image to Kubernetes
       - name: Update Kubernetes deployment
         run: |
-    
+
+         # Apply manifest (Deployment + Service)
+          kubectl apply -f ${{ env.K8S_MANIFEST }}
+          
           kubectl set image deployment/online-ide-deployment \
             online-ide=${{ secrets.DOCKERHUB_USERNAME }}/online-ide:${{ env.SHA_SHORT }} \
             --record || echo "Deployment not found yet, will apply manifest"
           
-          # Apply manifest (Deployment + Service)
-          kubectl apply -f ${{ env.K8S_MANIFEST }}
+          
 
       # Step 8: Wait for rollout to finish
       - name: Verify rollout status
