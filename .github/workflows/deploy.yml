@@ -44,7 +44,7 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
-    steps:
+  
       # Step 5: Configure AWS credentials (via OIDC or secrets)
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
